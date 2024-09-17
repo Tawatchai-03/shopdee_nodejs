@@ -46,7 +46,7 @@ app.get('/', function(req, res){
 
 /*############## CUSTOMER ##############*/
 // Register
-app.post('/api/register', 
+/*app.post('/api/register', 
     function(req, res) {  
         const { username, password, firstName, lastName } = req.body;
         
@@ -72,6 +72,36 @@ app.post('/api/register',
             }
 
         });      
+    }
+);*/
+//addmin reg
+app.post('/api/register', 
+    function(req, res) {
+        const { username, password, firstName, lastName, positionID } = req.body;
+        // If positionID is not provided, set a default value
+        const posID = positionID || 3; // Replace 3 with the appropriate default ID
+
+        // Check existing username
+        let sql = "SELECT * FROM admin WHERE username=?";
+        db.query(sql, [username], async function(err, results) {
+            if (err) throw err;
+
+            if (results.length == 0) {
+                // Encrypt password
+                const salt = await bcrypt.genSalt(10);
+                const password_hash = await bcrypt.hash(password, salt);
+
+                // Insert employee data into the database
+                sql = 'INSERT INTO admin (username, password, firstName, lastName, positionID) VALUES (?, ?, ?, ?, ?)';
+                db.query(sql, [username, password_hash, firstName, lastName, posID], (err, result) => {
+                    if (err) throw err;
+
+                    res.send({'message': 'ลงทะเบียนสำเร็จแล้ว', 'status': true});
+                });
+            } else {
+                res.send({'message': 'ชื่อผู้ใช้ซ้ำ', 'status': false});
+            }
+        });
     }
 );
 
@@ -308,25 +338,25 @@ app.delete('/api/customer/:id',
 
 /*############## EMPLOYEE ##############*/
 //Login (employee/admin)
-app.post('/api/admin/login',
+/*app.post('/api/admin/login',
     async function(req, res){
         //Validate username
         const {username, password} = req.body;                
-        let sql = "SELECT * FROM employee WHERE username=? AND isActive = 1";        
-        let employee = await query(sql, [username, username]);        
+        let sql = "SELECT * FROM admin WHERE username=? AND isActive = 1";        
+        let admin = await query(sql, [username, username]);        
         
-        if(employee.length <= 0){            
+        if(admin.length <= 0){            
             return res.send( {'message':'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง','status':false} );
         }else{            
-            employee = employee[0];
-            empID = employee['empID'];               
-            password_hash = employee['password'];       
-            positionID = employee['positionID']; 
+            admin = admin[0];
+            empID = admin['adminID'];               
+            password_hash = admin['password'];       
+            positionID = admin['positionID']; 
         }
 
         //validate a number of attempts 
         let loginAttempt = 0;
-        sql = "SELECT loginAttempt FROM employee WHERE username=? AND isActive = 1 ";        
+        sql = "SELECT loginAttempt FROM admin WHERE username=? AND isActive = 1 ";        
         sql += "AND lastAttemptTime >= CURRENT_TIMESTAMP - INTERVAL 24 HOUR ";        
         
         row = await query(sql, [username, username]);    
@@ -338,7 +368,7 @@ app.post('/api/admin/login',
             }    
         }else{
             //reset login attempt                
-            sql = "UPDATE employee SET loginAttempt = 0, lastAttemptTime=NULL WHERE username=? AND isActive = 1";                    
+            sql = "UPDATE admin SET loginAttempt = 0, lastAttemptTime=NULL WHERE username=? AND isActive = 1";                    
             await query(sql, [username, username]);               
         }              
         
@@ -346,22 +376,22 @@ app.post('/api/admin/login',
         //validate password       
         if(bcrypt.compareSync(password, password_hash)){
             //reset login attempt                
-            sql = "UPDATE employee SET loginAttempt = 0, lastAttemptTime=NULL WHERE username=? AND isActive = 1";        
+            sql = "UPDATE admin SET loginAttempt = 0, lastAttemptTime=NULL WHERE username=? AND isActive = 1";        
             await query(sql, [username, username]);   
 
             //get token
-            const token = jwt.sign({ empID: empID, username: username, positionID: positionID }, 
+            const token = jwt.sign({ adminID: adminID, username: username, positionID: positionID }, 
                                     SECRET_KEY, { expiresIn: '1h' });                
 
-            employee['token'] = token;
-            employee['message'] = 'เข้าสู่ระบบสำเร็จ';
-            employee['status'] = true;
+            admin['token'] = token;
+            admin['message'] = 'เข้าสู่ระบบสำเร็จ';
+            admin['status'] = true;
 
-            res.send(employee);            
+            res.send(admin);            
         }else{
             //update login attempt
             const lastAttemptTime = new Date();
-            sql = "UPDATE employee SET loginAttempt = loginAttempt + 1, lastAttemptTime=? ";
+            sql = "UPDATE admin SET loginAttempt = loginAttempt + 1, lastAttemptTime=? ";
             sql += "WHERE username=? AND isActive = 1";                   
             await query(sql, [lastAttemptTime, username, username]);           
             
@@ -373,58 +403,138 @@ app.post('/api/admin/login',
         }
 
     }
-);
+);*/
 
-//List employees
-app.get('/api/employee',
-    function(req, res){             
-        const token = req.headers["authorization"].replace("Bearer ", "");
-            
-        try{
-            let decode = jwt.verify(token, SECRET_KEY);               
-            if(decode.positionID != 1) {
-              return res.send( {'message':'คุณไม่ได้รับสิทธิ์ในการเข้าใช้งาน','status':false} );
-            }
-            
-            let sql = "SELECT * FROM employee";            
-            db.query(sql, function (err, result){
-                if (err) throw err;            
-                res.send(result);
-            });      
-
-        }catch(error){
-            res.send( {'message':'โทเคนไม่ถูกต้อง','status':false} );
-        }
-        
-    }
-);
-
-//Show an employee detail
-app.get('/api/employee/:id',
+//Login (employee/admin)
+app.post('/api/admin/login',
     async function(req, res){
-        const empID = req.params.id;        
-        const token = req.headers["authorization"].replace("Bearer ", "");
-            
-        try{
-            let decode = jwt.verify(token, SECRET_KEY);               
-            if(empID != decode.empID && decode.positionID != 1) {
-              return res.send( {'message':'คุณไม่ได้รับสิทธิ์ในการเข้าใช้งาน','status':false} );
-            }
-            
-            let sql = "SELECT * FROM employee WHERE empID = ? AND isActive = 1";        
-            let employee = await query(sql, [empID]);        
-            
-            employee = employee[0];
-            employee['message'] = 'success';
-            employee['status'] = true;
-            res.send(employee); 
+        //Validate username
+        const {username, password} = req.body;                
+        let sql = "SELECT * FROM admin WHERE username=? AND isActive = 1";        
+        let admin = await query(sql, [username]);        
 
-        }catch(error){
-            res.send( {'message':'โทเคนไม่ถูกต้อง','status':false} );
+        let adminID, password_hash, positionID; // ประกาศตัวแปรนอกบล็อก
+
+        if(admin.length <= 0){            
+            return res.send({'message':'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'status': false});
+        } else {            
+            admin = admin[0];
+            adminID = admin['adminID'];               
+            password_hash = admin['password'];       
+            positionID = admin['positionID']; 
         }
+
+        //validate a number of attempts 
+        let loginAttempt = 0;
+        sql = "SELECT loginAttempt FROM admin WHERE username=? AND isActive = 1 ";        
+        sql += "AND lastAttemptTime >= CURRENT_TIMESTAMP - INTERVAL 24 HOUR ";        
         
+        let row = await query(sql, [username]);    
+        if(row.length > 0){
+            loginAttempt = row[0]['loginAttempt'];
+
+            if(loginAttempt >= 3) {
+                return res.send({'message': 'บัญชีคุณถูกล๊อก เนื่องจากมีการพยายามเข้าสู่ระบบเกินกำหนด', 'status': false});    
+            }    
+        } else {
+            //reset login attempt                
+            sql = "UPDATE admin SET loginAttempt = 0, lastAttemptTime=NULL WHERE username=? AND isActive = 1";                    
+            await query(sql, [username]);               
+        }              
+        
+        //validate password       
+        if(bcrypt.compareSync(password, password_hash)){
+            //reset login attempt                
+            sql = "UPDATE admin SET loginAttempt = 0, lastAttemptTime=NULL WHERE username=? AND isActive = 1";        
+            await query(sql, [username]);   
+
+            //get token
+            const token = jwt.sign({ adminID: adminID, username: username, positionID: positionID }, 
+                                    SECRET_KEY, { expiresIn: '1h' });                
+
+            admin['token'] = token;
+            admin['message'] = 'เข้าสู่ระบบสำเร็จ';
+            admin['status'] = true;
+
+            res.send(admin);            
+        } else {
+            //update login attempt
+            const lastAttemptTime = new Date();
+            sql = "UPDATE admin SET loginAttempt = loginAttempt + 1, lastAttemptTime=? ";
+            sql += "WHERE username=? AND isActive = 1";                   
+            await query(sql, [lastAttemptTime, username]);           
+            
+            if(loginAttempt >= 2){
+                res.send({'message': 'บัญชีคุณถูกล๊อก เนื่องจากมีการพยายามเข้าสู่ระบบเกินกำหนด', 'status': false});    
+            } else {
+                res.send({'message': 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'status': false});    
+            }            
+        }
     }
 );
+
+
+
+// List employees
+app.get('/api/employee', function(req, res) {             
+    // ตรวจสอบว่า Authorization header มีค่าอยู่หรือไม่
+    if (!req.headers["authorization"]) {
+        return res.status(401).send({'message': 'ไม่มีโทเคน', 'status': false});
+    }
+
+    const token = req.headers["authorization"].replace("Bearer ", "");
+
+    try {
+        let decode = jwt.verify(token, SECRET_KEY);               
+        if (decode.positionID != 1) {
+            return res.send({'message': 'คุณไม่ได้รับสิทธิ์ในการเข้าใช้งาน', 'status': false});
+        }
+
+        let sql = "SELECT * FROM employee";            
+        db.query(sql, function (err, result) {
+            if (err) throw err;            
+            res.send(result);
+        });      
+
+    } catch (error) {
+        res.send({'message': 'โทเคนไม่ถูกต้อง', 'status': false});
+    }
+});
+
+// Show an employee detail
+app.get('/api/employee/:id', async function(req, res) {
+    const empID = req.params.id;
+
+    // ตรวจสอบว่า Authorization header มีค่าอยู่หรือไม่
+    if (!req.headers["authorization"]) {
+        return res.status(401).send({'message': 'ไม่มีโทเคน', 'status': false});
+    }
+
+    const token = req.headers["authorization"].replace("Bearer ", "");
+
+    try {
+        let decode = jwt.verify(token, SECRET_KEY);               
+        if (empID != decode.empID && decode.positionID != 1) {
+            return res.send({'message': 'คุณไม่ได้รับสิทธิ์ในการเข้าใช้งาน', 'status': false});
+        }
+
+        let sql = "SELECT * FROM employee WHERE empID = ? AND isActive = 1";        
+        let employee = await query(sql, [empID]);        
+
+        if (employee.length === 0) {
+            return res.send({'message': 'ไม่พบข้อมูลพนักงาน', 'status': false});
+        }
+
+        employee = employee[0];
+        employee['message'] = 'success';
+        employee['status'] = true;
+        res.send(employee); 
+
+    } catch (error) {
+        res.send({'message': 'โทเคนไม่ถูกต้อง', 'status': false});
+    }
+});
+
 
 
 //Generate a password
@@ -438,38 +548,43 @@ function generateRandomPassword(length) {
 }
 
 
-//Add an employee
+// Add an employee
 app.post('/api/employee', 
     async function(req, res){
   
-        //Receive a token
-        const token = req.headers["authorization"].replace("Bearer ", "");        
+        // Receive a token
+        const authHeader = req.headers["authorization"];
+        if (!authHeader) {
+            return res.send({'message':'ไม่มีโทเคน','status':false});
+        }
+
+        const token = authHeader.replace("Bearer ", "");        
     
         try{
-            //Validate the token    
+            // Validate the token    
             let decode = jwt.verify(token, SECRET_KEY);               
             if(decode.positionID != 1) {
-                return res.send( {'message':'คุณไม่ได้รับสิทธิ์ในการเข้าใช้งาน','status':false} );
+                return res.send({'message':'คุณไม่ได้รับสิทธิ์ในการเข้าใช้งาน','status':false});
             }            
 
-            //receive data from users
-            const {username, firstName, lastName, email, gender } = req.body;
+            // Receive data from users
+            const { username, firstName, lastName, email, gender } = req.body;
 
-            //check existing username
-            let sql="SELECT * FROM employee WHERE username=?";
+            // Check existing username
+            let sql = "SELECT * FROM employee WHERE username=?";
             db.query(sql, [username], async function(err, results) {
                 if (err) throw err;
                 
                 if(results.length == 0) {
-                    //password and salt are encrypted by hash function (bcrypt)
+                    // Password and salt are encrypted by hash function (bcrypt)
                     const password = generateRandomPassword(8);
-                    const salt = await bcrypt.genSalt(10); //generate salte
+                    const salt = await bcrypt.genSalt(10); // Generate salt
                     const password_hash = await bcrypt.hash(password, salt);    
                     
-                    //save data into database                
+                    // Save data into database                
                     let sql = `INSERT INTO employee(
                             username, password, firstName, lastName, email, gender
-                            )VALUES(?, ?, ?, ?, ?, ?)`;   
+                            ) VALUES (?, ?, ?, ?, ?, ?)`;   
                     let params = [username, password_hash, firstName, lastName, email, gender];
                 
                     db.query(sql, params, (err, result) => {
@@ -477,16 +592,17 @@ app.post('/api/employee',
                         res.send({ 'message': 'เพิ่มข้อมูลพนักงานเรียบร้อยแล้ว', 'status': true });
                     });                    
 
-                }else{
+                } else {
                     res.send({'message':'ชื่อผู้ใช้ซ้ำ','status':false});
                 }
             });                        
             
-        }catch(error){
-            res.send( {'message':'โทเคนไม่ถูกต้อง','status':false} );
+        } catch (error) {
+            res.send({'message':'โทเคนไม่ถูกต้อง','status':false});
         }    
     }
 );
+
     
 //Update an employee
 app.put('/api/employee/:id', 
